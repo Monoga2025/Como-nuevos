@@ -61,7 +61,7 @@ modules/
 - Web React + Tailwind con layout Odoo-like y dashboard en español.
 - Sistema de módulos con colores/iconos base para escalado.
 - `docker-compose.yml` con PostgreSQL + Redis.
-- Configuración de despliegue frontend en Vercel para monorepo.
+- Configuración de despliegue frontend y backend serverless-compatible en Vercel para monorepo.
 
 ## 4) Ejecución local
 
@@ -81,7 +81,7 @@ npm run infra:up
 
 ## 5) Deploy
 
-- Guía completa de Vercel (monorepo): `docs/deploy.md`.
+- Guía completa de Vercel (monorepo web + API + troubleshooting 500): `docs/deploy.md`.
 - Configuración de proyecto para Vercel incluida en `apps/web/vercel.json`.
 
 ## 6) Próximos pasos inmediatos
