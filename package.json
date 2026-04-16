@@ -1,0 +1,17 @@
+{
+  "name": "segundo-cerebro",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w @segundo-cerebro/web",
+    "dev:api": "npm run dev -w @segundo-cerebro/api",
+    "build": "npm run build -ws --if-present",
+    "typecheck": "npm run typecheck -ws --if-present",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down"
+  }
+}
