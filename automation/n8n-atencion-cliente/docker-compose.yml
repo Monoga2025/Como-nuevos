@@ -1,0 +1,99 @@
+version: "3.9"
+
+# Stack completo de atención al cliente por WhatsApp:
+# n8n (orquestador) + Evolution API (WhatsApp) + Redis (buffer/memoria) + PostgreSQL (persistencia)
+#
+# 1. Copia .env.example a .env y cambia TODAS las claves.
+# 2. docker compose up -d
+# 3. n8n:        http://localhost:5678
+#    Evolution:  http://localhost:8080/manager  (login con AUTHENTICATION_API_KEY)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ac_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-atencion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: evolution
+    volumes:
+      - ac_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-atencion}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ac_redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - ac_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  evolution-api:
+    # Pinea una versión concreta en producción, p. ej. evoapicloud/evolution-api:v2.3.1
+    image: evoapicloud/evolution-api:latest
+    container_name: ac_evolution
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_URL: ${EVOLUTION_SERVER_URL:-http://localhost:8080}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?Define EVOLUTION_API_KEY en .env}
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER:-atencion}:${POSTGRES_PASSWORD}@postgres:5432/evolution
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/1
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+      LOG_LEVEL: ERROR
+      DEL_INSTANCE: "false"
+    volumes:
+      - ac_evolution_instances:/evolution/instances
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: ac_n8n
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      GENERIC_TIMEZONE: ${TIMEZONE:-America/Bogota}
+      TZ: ${TIMEZONE:-America/Bogota}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Define N8N_ENCRYPTION_KEY en .env}
+      N8N_SECURE_COOKIE: "false"
+    volumes:
+      - ac_n8n_data:/home/node/.n8n
+
+volumes:
+  ac_postgres_data:
+  ac_redis_data:
+  ac_evolution_instances:
+  ac_n8n_data:

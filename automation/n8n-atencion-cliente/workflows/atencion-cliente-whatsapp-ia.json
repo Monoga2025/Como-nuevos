@@ -1,0 +1,821 @@
+{
+  "name": "Atención al Cliente WhatsApp — Evolution API + Redis + IA",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1️⃣ ENTRADA\nEvolution API envía cada mensaje de WhatsApp a este webhook (evento MESSAGES_UPSERT).\n\n**Configura primero el nodo `⚙️ Config Negocio`** con los datos de tu cliente y ejecuta el workflow `Configurar Webhook Evolution` una sola vez.",
+        "height": 340,
+        "width": 480,
+        "color": 4
+      },
+      "id": "sticky-entrada",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-1560, -200]
+    },
+    {
+      "parameters": {
+        "content": "## 2️⃣ MULTIMEDIA\nSi el cliente envía **audio**, se descarga y se transcribe con Whisper.\nSi envía **imagen**, se analiza con visión de GPT-4o.\nAsí el bot entiende cualquier tipo de mensaje.",
+        "height": 620,
+        "width": 720,
+        "color": 5
+      },
+      "id": "sticky-media",
+      "name": "Nota Multimedia",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-360, -560]
+    },
+    {
+      "parameters": {
+        "content": "## 3️⃣ BUFFER INTELIGENTE (Redis)\nLos clientes escriben en varios mensajes seguidos. Este bloque los **agrupa**: guarda cada mensaje en Redis, espera unos segundos y solo responde cuando el cliente terminó de escribir. Una sola respuesta coherente en vez de 5 respuestas sueltas.",
+        "height": 340,
+        "width": 940,
+        "color": 6
+      },
+      "id": "sticky-buffer",
+      "name": "Nota Buffer",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [420, -200]
+    },
+    {
+      "parameters": {
+        "content": "## 4️⃣ CEREBRO IA\nAgente con **memoria por cliente en Redis** (recuerda la conversación completa). Personaliza el prompt del sistema en el nodo del agente con los datos del negocio.\n\nSi el cliente pide hablar con una persona, el agente emite el marcador `[ESCALAR_HUMANO]`.",
+        "height": 560,
+        "width": 620,
+        "color": 3
+      },
+      "id": "sticky-ia",
+      "name": "Nota IA",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1420, -420]
+    },
+    {
+      "parameters": {
+        "content": "## 5️⃣ ESCALAMIENTO Y RESPUESTA\nSi hay escalamiento: se **pausa el bot** para ese cliente (clave Redis con TTL) y se **avisa al encargado** por WhatsApp.\nLa respuesta se divide en mensajes cortos con retraso de 'escribiendo…' para parecer humana.",
+        "height": 560,
+        "width": 980,
+        "color": 2
+      },
+      "id": "sticky-salida",
+      "name": "Nota Salida",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2080, -420]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "evolution-whatsapp",
+        "options": {}
+      },
+      "id": "webhook-evolution",
+      "name": "Webhook Evolution",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1480, -60],
+      "webhookId": "evolution-whatsapp-entrada"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-01",
+              "name": "nombre_negocio",
+              "value": "Como Nuevos",
+              "type": "string"
+            },
+            {
+              "id": "cfg-02",
+              "name": "descripcion_negocio",
+              "value": "Tienda especializada en productos reacondicionados con garantía: celulares, computadores y tecnología como nuevos a mejor precio.",
+              "type": "string"
+            },
+            {
+              "id": "cfg-03",
+              "name": "horario",
+              "value": "Lunes a sábado de 9:00 a.m. a 7:00 p.m. Domingos y festivos cerrado.",
+              "type": "string"
+            },
+            {
+              "id": "cfg-04",
+              "name": "servicios_y_precios",
+              "value": "- iPhone reacondicionados desde $900.000 COP\n- Portátiles reacondicionados desde $1.200.000 COP\n- Garantía de 6 meses en todos los productos\n- Envíos a todo el país (2-4 días hábiles)\n- Pago: transferencia, tarjeta, contraentrega en la ciudad",
+              "type": "string"
+            },
+            {
+              "id": "cfg-05",
+              "name": "politicas",
+              "value": "Cambios dentro de los primeros 15 días por defectos de fábrica. La garantía no cubre daños por golpes o humedad.",
+              "type": "string"
+            },
+            {
+              "id": "cfg-06",
+              "name": "evolution_url",
+              "value": "http://evolution-api:8080",
+              "type": "string"
+            },
+            {
+              "id": "cfg-07",
+              "name": "evolution_instancia",
+              "value": "principal",
+              "type": "string"
+            },
+            {
+              "id": "cfg-08",
+              "name": "evolution_apikey",
+              "value": "CAMBIA_ESTA_API_KEY",
+              "type": "string"
+            },
+            {
+              "id": "cfg-09",
+              "name": "numero_encargado",
+              "value": "573000000000",
+              "type": "string"
+            },
+            {
+              "id": "cfg-10",
+              "name": "segundos_buffer",
+              "value": 12,
+              "type": "number"
+            },
+            {
+              "id": "cfg-11",
+              "name": "minutos_pausa_humano",
+              "value": 60,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config-negocio",
+      "name": "⚙️ Config Negocio",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-1260, -60]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "filtro-01",
+              "leftValue": "={{ $('Webhook Evolution').first().json.body.event }}",
+              "rightValue": "messages.upsert",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "id": "filtro-02",
+              "leftValue": "={{ $('Webhook Evolution').first().json.body.data.key.fromMe }}",
+              "rightValue": "true",
+              "operator": { "type": "boolean", "operation": "false", "singleValue": true }
+            },
+            {
+              "id": "filtro-03",
+              "leftValue": "={{ $('Webhook Evolution').first().json.body.data.key.remoteJid }}",
+              "rightValue": "@g.us",
+              "operator": { "type": "string", "operation": "notContains" }
+            },
+            {
+              "id": "filtro-04",
+              "leftValue": "={{ $('Webhook Evolution').first().json.body.data.key.remoteJid }}",
+              "rightValue": "status@broadcast",
+              "operator": { "type": "string", "operation": "notContains" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filtro-mensajes",
+      "name": "Filtro Mensajes Válidos",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-1040, -60]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normaliza el payload de Evolution API (MESSAGES_UPSERT) a un formato único\nconst body = $('Webhook Evolution').first().json.body;\nconst data = body.data || {};\nconst key = data.key || {};\nconst msg = data.message || {};\n\nconst telefono = String(key.remoteJid || '').split('@')[0];\nconst nombre = data.pushName || 'Cliente';\nconst messageId = key.id || '';\n\nlet tipo = 'no_soportado';\nlet texto = '';\n\nif (msg.conversation) {\n  tipo = 'texto';\n  texto = msg.conversation;\n} else if (msg.extendedTextMessage?.text) {\n  tipo = 'texto';\n  texto = msg.extendedTextMessage.text;\n} else if (msg.buttonsResponseMessage?.selectedDisplayText) {\n  tipo = 'texto';\n  texto = msg.buttonsResponseMessage.selectedDisplayText;\n} else if (msg.listResponseMessage?.title) {\n  tipo = 'texto';\n  texto = msg.listResponseMessage.title;\n} else if (msg.audioMessage) {\n  tipo = 'audio';\n} else if (msg.imageMessage) {\n  tipo = 'imagen';\n  texto = msg.imageMessage.caption || '';\n} else if (msg.documentMessage) {\n  tipo = 'texto';\n  texto = '[El cliente envió un documento adjunto: ' + (msg.documentMessage.fileName || 'archivo') + ']';\n} else if (msg.locationMessage) {\n  tipo = 'texto';\n  texto = '[El cliente compartió su ubicación]';\n}\n\nreturn [{ json: { telefono, nombre, messageId, tipo, texto } }];"
+      },
+      "id": "normalizar-mensaje",
+      "name": "Normalizar Mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-820, -80]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "pausado",
+        "key": "=pausa:{{ $json.telefono }}",
+        "options": {}
+      },
+      "id": "leer-pausa",
+      "name": "¿Bot Pausado?",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [-620, -80]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "pausa-01",
+              "leftValue": "={{ $json.pausado }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "empty", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "continuar-si-activo",
+      "name": "Continuar si Bot Activo",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-420, -80]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+                "conditions": [
+                  {
+                    "id": "sw-audio",
+                    "leftValue": "={{ $('Normalizar Mensaje').first().json.tipo }}",
+                    "rightValue": "audio",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "audio"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+                "conditions": [
+                  {
+                    "id": "sw-imagen",
+                    "leftValue": "={{ $('Normalizar Mensaje').first().json.tipo }}",
+                    "rightValue": "imagen",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "imagen"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+                "conditions": [
+                  {
+                    "id": "sw-texto",
+                    "leftValue": "={{ $('Normalizar Mensaje').first().json.tipo }}",
+                    "rightValue": "texto",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "texto"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "tipo-mensaje",
+      "name": "Tipo de Mensaje",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [-220, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('⚙️ Config Negocio').first().json.evolution_url }}/chat/getBase64FromMediaMessage/{{ $('⚙️ Config Negocio').first().json.evolution_instancia }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('⚙️ Config Negocio').first().json.evolution_apikey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: { key: { id: $('Normalizar Mensaje').first().json.messageId } }, convertToMp4: false }) }}",
+        "options": {}
+      },
+      "id": "descargar-audio",
+      "name": "Descargar Audio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-280, -420]
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "base64",
+        "options": {
+          "fileName": "audio.ogg",
+          "mimeType": "audio/ogg"
+        }
+      },
+      "id": "audio-a-archivo",
+      "name": "Audio a Archivo",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [-100, -420]
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "transcribir-audio",
+      "name": "Transcribir Audio (Whisper)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [80, -420]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reconstruye el mensaje normalizado con la transcripción del audio\nconst base = $('Normalizar Mensaje').first().json;\nconst transcripcion = $json.text || '';\nreturn [{ json: { ...base, tipo: 'texto', texto: '[Nota de voz transcrita] ' + transcripcion } }];"
+      },
+      "id": "texto-desde-audio",
+      "name": "Texto desde Audio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, -420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('⚙️ Config Negocio').first().json.evolution_url }}/chat/getBase64FromMediaMessage/{{ $('⚙️ Config Negocio').first().json.evolution_instancia }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('⚙️ Config Negocio').first().json.evolution_apikey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: { key: { id: $('Normalizar Mensaje').first().json.messageId } }, convertToMp4: false }) }}",
+        "options": {}
+      },
+      "id": "descargar-imagen",
+      "name": "Descargar Imagen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-280, -200]
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "base64",
+        "options": {
+          "fileName": "imagen.jpg",
+          "mimeType": "image/jpeg"
+        }
+      },
+      "id": "imagen-a-archivo",
+      "name": "Imagen a Archivo",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [-100, -200]
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "text": "Describe brevemente qué muestra esta imagen enviada por un cliente a un negocio (producto, comprobante de pago, daño, etc.). Responde en español en máximo 3 frases.",
+        "inputType": "base64",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "analizar-imagen",
+      "name": "Analizar Imagen (Visión)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [80, -200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reconstruye el mensaje normalizado con el análisis de la imagen\nconst base = $('Normalizar Mensaje').first().json;\nconst analisis = $json.content || $json.text || '';\nconst caption = base.texto ? ' Texto que acompaña la imagen: \"' + base.texto + '\"' : '';\nreturn [{ json: { ...base, tipo: 'texto', texto: '[El cliente envió una imagen. Contenido: ' + analisis + ']' + caption } }];"
+      },
+      "id": "texto-desde-imagen",
+      "name": "Texto desde Imagen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, -200]
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "=buffer:{{ $('Normalizar Mensaje').first().json.telefono }}",
+        "messageData": "={{ $json.texto }}",
+        "tail": true
+      },
+      "id": "guardar-buffer",
+      "name": "Guardar en Buffer",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [480, -80]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "=ultimo:{{ $('Normalizar Mensaje').first().json.telefono }}",
+        "value": "={{ $('Normalizar Mensaje').first().json.messageId }}",
+        "expire": true,
+        "ttl": 300
+      },
+      "id": "marcar-ultimo",
+      "name": "Marcar Último Mensaje",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [640, -80]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('⚙️ Config Negocio').first().json.segundos_buffer }}",
+        "unit": "seconds"
+      },
+      "id": "esperar-agrupacion",
+      "name": "Esperar Agrupación",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [800, -80],
+      "webhookId": "espera-buffer-mensajes"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "ultimoGuardado",
+        "key": "=ultimo:{{ $('Normalizar Mensaje').first().json.telefono }}",
+        "options": {}
+      },
+      "id": "leer-ultimo",
+      "name": "Leer Último Mensaje",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [960, -80]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ultimo-01",
+              "leftValue": "={{ $json.ultimoGuardado }}",
+              "rightValue": "={{ $('Normalizar Mensaje').first().json.messageId }}",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "es-el-ultimo",
+      "name": "¿Es el Último Mensaje?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1120, -80]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "mensajes",
+        "key": "=buffer:{{ $('Normalizar Mensaje').first().json.telefono }}",
+        "keyType": "list",
+        "options": {}
+      },
+      "id": "leer-buffer",
+      "name": "Leer Buffer Completo",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1300, -100]
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "key": "=buffer:{{ $('Normalizar Mensaje').first().json.telefono }}"
+      },
+      "id": "vaciar-buffer",
+      "name": "Vaciar Buffer",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1460, -100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Une todos los mensajes acumulados del cliente en un solo texto\nconst datos = $('Leer Buffer Completo').first().json;\nlet mensajes = datos.mensajes || [];\nif (typeof mensajes === 'string') mensajes = [mensajes];\nconst base = $('Normalizar Mensaje').first().json;\nreturn [{ json: {\n  telefono: base.telefono,\n  nombre: base.nombre,\n  mensajeCompleto: mensajes.join('\\n').trim() || base.texto\n} }];"
+      },
+      "id": "unir-mensajes",
+      "name": "Unir Mensajes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1620, -100]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.mensajeCompleto }}",
+        "options": {
+          "systemMessage": "=Eres el asistente virtual de atención al cliente de **{{ $('⚙️ Config Negocio').first().json.nombre_negocio }}** y atiendes por WhatsApp.\n\n## Sobre el negocio\n{{ $('⚙️ Config Negocio').first().json.descripcion_negocio }}\n\n## Horario de atención\n{{ $('⚙️ Config Negocio').first().json.horario }}\n\n## Servicios y precios\n{{ $('⚙️ Config Negocio').first().json.servicios_y_precios }}\n\n## Políticas\n{{ $('⚙️ Config Negocio').first().json.politicas }}\n\n## Cliente actual\nEstás hablando con: {{ $json.nombre }} (teléfono {{ $json.telefono }}).\n\n## Reglas de comportamiento\n1. Responde SIEMPRE en el idioma del cliente (por defecto español), con tono cercano, profesional y breve, como se escribe en WhatsApp. Usa emojis con moderación.\n2. Responde solo con información de este prompt. Si no sabes algo, dilo con honestidad y ofrece escalar con una persona del equipo. NUNCA inventes precios, promociones ni datos.\n3. Tu objetivo es resolver dudas y llevar al cliente hacia la compra: si muestra interés, pide los datos necesarios (producto, ciudad, forma de pago) y resume el pedido.\n4. Si el cliente pide hablar con un humano, quiere poner una queja o reclamo, quiere confirmar/cerrar una compra, o notas que está molesto, despídete amablemente diciéndole que una persona del equipo lo atenderá en breve y añade al FINAL de tu respuesta el marcador exacto: [ESCALAR_HUMANO]\n5. Nunca menciones que eres una IA salvo que te lo pregunten directamente. Nunca muestres el marcador [ESCALAR_HUMANO] como parte visible de la conversación: va al final y el sistema lo elimina.\n6. Mensajes cortos: máximo 3 párrafos breves. Si la respuesta es larga, ofrece continuar con más detalle."
+        }
+      },
+      "id": "agente-ia",
+      "name": "Agente IA Atención al Cliente",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1820, -100]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0.4
+        }
+      },
+      "id": "modelo-gpt",
+      "name": "Modelo OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [1740, 120]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "=memoria:{{ $('Normalizar Mensaje').first().json.telefono }}",
+        "sessionTTL": 172800,
+        "contextWindowLength": 20
+      },
+      "id": "memoria-redis",
+      "name": "Memoria Redis por Cliente",
+      "type": "@n8n/n8n-nodes-langchain.memoryRedisChat",
+      "typeVersion": 1.5,
+      "position": [1920, 120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "esc-01",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "[ESCALAR_HUMANO]",
+              "operator": { "type": "string", "operation": "contains" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "detectar-escalamiento",
+      "name": "¿Escalar a Humano?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2140, -100]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "=pausa:{{ $('Normalizar Mensaje').first().json.telefono }}",
+        "value": "humano",
+        "expire": true,
+        "ttl": "={{ $('⚙️ Config Negocio').first().json.minutos_pausa_humano * 60 }}"
+      },
+      "id": "pausar-bot",
+      "name": "Pausar Bot (Redis)",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [2340, -220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('⚙️ Config Negocio').first().json.evolution_url }}/message/sendText/{{ $('⚙️ Config Negocio').first().json.evolution_instancia }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('⚙️ Config Negocio').first().json.evolution_apikey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $('⚙️ Config Negocio').first().json.numero_encargado, text: '🔔 *Atención requerida*\\n\\nEl cliente *' + $('Normalizar Mensaje').first().json.nombre + '* (wa.me/' + $('Normalizar Mensaje').first().json.telefono + ') solicita atención humana.\\n\\nÚltimo mensaje:\\n_' + $('Unir Mensajes').first().json.mensajeCompleto + '_\\n\\nEl bot queda pausado ' + $('⚙️ Config Negocio').first().json.minutos_pausa_humano + ' minutos para este chat.', delay: 800 }) }}",
+        "options": {}
+      },
+      "id": "notificar-encargado",
+      "name": "Notificar al Encargado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2520, -220]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Limpia el marcador de escalamiento y divide la respuesta en mensajes cortos\n// con retraso proporcional (simula escritura humana en WhatsApp)\nconst salida = $('Agente IA Atención al Cliente').first().json.output || '';\nconst texto = salida.replace(/\\[ESCALAR_HUMANO\\]/g, '').trim();\nif (!texto) return [];\n\nconst MAX = 1200;\nconst bloques = [];\nfor (const parrafo of texto.split(/\\n\\n+/)) {\n  const p = parrafo.trim();\n  if (!p) continue;\n  if (p.length <= MAX) {\n    bloques.push(p);\n  } else {\n    // divide párrafos muy largos por frases\n    let actual = '';\n    for (const frase of p.split(/(?<=[.!?])\\s+/)) {\n      if ((actual + ' ' + frase).trim().length > MAX) {\n        if (actual) bloques.push(actual.trim());\n        actual = frase;\n      } else {\n        actual = (actual + ' ' + frase).trim();\n      }\n    }\n    if (actual) bloques.push(actual.trim());\n  }\n}\n\nconst telefono = $('Normalizar Mensaje').first().json.telefono;\nreturn bloques.map((b) => ({ json: {\n  telefono,\n  texto: b,\n  // 35 ms por carácter, entre 1.2 y 5 segundos de 'escribiendo…'\n  delay: Math.min(Math.max(Math.round(b.length * 35), 1200), 5000)\n} }));"
+      },
+      "id": "preparar-respuesta",
+      "name": "Preparar Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2720, -60]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('⚙️ Config Negocio').first().json.evolution_url }}/message/sendText/{{ $('⚙️ Config Negocio').first().json.evolution_instancia }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('⚙️ Config Negocio').first().json.evolution_apikey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.telefono, text: $json.texto, delay: $json.delay, linkPreview: true }) }}",
+        "options": {}
+      },
+      "id": "enviar-whatsapp",
+      "name": "Enviar Respuesta WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2900, -60]
+    }
+  ],
+  "connections": {
+    "Webhook Evolution": {
+      "main": [[{ "node": "⚙️ Config Negocio", "type": "main", "index": 0 }]]
+    },
+    "⚙️ Config Negocio": {
+      "main": [[{ "node": "Filtro Mensajes Válidos", "type": "main", "index": 0 }]]
+    },
+    "Filtro Mensajes Válidos": {
+      "main": [[{ "node": "Normalizar Mensaje", "type": "main", "index": 0 }], []]
+    },
+    "Normalizar Mensaje": {
+      "main": [[{ "node": "¿Bot Pausado?", "type": "main", "index": 0 }]]
+    },
+    "¿Bot Pausado?": {
+      "main": [[{ "node": "Continuar si Bot Activo", "type": "main", "index": 0 }]]
+    },
+    "Continuar si Bot Activo": {
+      "main": [[{ "node": "Tipo de Mensaje", "type": "main", "index": 0 }], []]
+    },
+    "Tipo de Mensaje": {
+      "main": [
+        [{ "node": "Descargar Audio", "type": "main", "index": 0 }],
+        [{ "node": "Descargar Imagen", "type": "main", "index": 0 }],
+        [{ "node": "Guardar en Buffer", "type": "main", "index": 0 }]
+      ]
+    },
+    "Descargar Audio": {
+      "main": [[{ "node": "Audio a Archivo", "type": "main", "index": 0 }]]
+    },
+    "Audio a Archivo": {
+      "main": [[{ "node": "Transcribir Audio (Whisper)", "type": "main", "index": 0 }]]
+    },
+    "Transcribir Audio (Whisper)": {
+      "main": [[{ "node": "Texto desde Audio", "type": "main", "index": 0 }]]
+    },
+    "Texto desde Audio": {
+      "main": [[{ "node": "Guardar en Buffer", "type": "main", "index": 0 }]]
+    },
+    "Descargar Imagen": {
+      "main": [[{ "node": "Imagen a Archivo", "type": "main", "index": 0 }]]
+    },
+    "Imagen a Archivo": {
+      "main": [[{ "node": "Analizar Imagen (Visión)", "type": "main", "index": 0 }]]
+    },
+    "Analizar Imagen (Visión)": {
+      "main": [[{ "node": "Texto desde Imagen", "type": "main", "index": 0 }]]
+    },
+    "Texto desde Imagen": {
+      "main": [[{ "node": "Guardar en Buffer", "type": "main", "index": 0 }]]
+    },
+    "Guardar en Buffer": {
+      "main": [[{ "node": "Marcar Último Mensaje", "type": "main", "index": 0 }]]
+    },
+    "Marcar Último Mensaje": {
+      "main": [[{ "node": "Esperar Agrupación", "type": "main", "index": 0 }]]
+    },
+    "Esperar Agrupación": {
+      "main": [[{ "node": "Leer Último Mensaje", "type": "main", "index": 0 }]]
+    },
+    "Leer Último Mensaje": {
+      "main": [[{ "node": "¿Es el Último Mensaje?", "type": "main", "index": 0 }]]
+    },
+    "¿Es el Último Mensaje?": {
+      "main": [[{ "node": "Leer Buffer Completo", "type": "main", "index": 0 }], []]
+    },
+    "Leer Buffer Completo": {
+      "main": [[{ "node": "Vaciar Buffer", "type": "main", "index": 0 }]]
+    },
+    "Vaciar Buffer": {
+      "main": [[{ "node": "Unir Mensajes", "type": "main", "index": 0 }]]
+    },
+    "Unir Mensajes": {
+      "main": [[{ "node": "Agente IA Atención al Cliente", "type": "main", "index": 0 }]]
+    },
+    "Modelo OpenAI": {
+      "ai_languageModel": [[{ "node": "Agente IA Atención al Cliente", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Memoria Redis por Cliente": {
+      "ai_memory": [[{ "node": "Agente IA Atención al Cliente", "type": "ai_memory", "index": 0 }]]
+    },
+    "Agente IA Atención al Cliente": {
+      "main": [[{ "node": "¿Escalar a Humano?", "type": "main", "index": 0 }]]
+    },
+    "¿Escalar a Humano?": {
+      "main": [
+        [{ "node": "Pausar Bot (Redis)", "type": "main", "index": 0 }],
+        [{ "node": "Preparar Respuesta", "type": "main", "index": 0 }]
+      ]
+    },
+    "Pausar Bot (Redis)": {
+      "main": [[{ "node": "Notificar al Encargado", "type": "main", "index": 0 }]]
+    },
+    "Notificar al Encargado": {
+      "main": [[{ "node": "Preparar Respuesta", "type": "main", "index": 0 }]]
+    },
+    "Preparar Respuesta": {
+      "main": [[{ "node": "Enviar Respuesta WhatsApp", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [
+    { "name": "atencion-cliente" },
+    { "name": "whatsapp" },
+    { "name": "evolution-api" }
+  ]
+}

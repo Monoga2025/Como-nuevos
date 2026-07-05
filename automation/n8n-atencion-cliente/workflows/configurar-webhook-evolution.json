@@ -1,0 +1,103 @@
+{
+  "name": "Configurar Webhook Evolution (ejecutar 1 vez)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Configuración inicial (una sola vez)\n\n1. Edita el nodo `Datos de Conexión` con la URL de Evolution API, la instancia, la API key y la URL pública del webhook de n8n (la del workflow principal, en modo **Producción**: termina en `/webhook/evolution-whatsapp`).\n2. Pulsa **Execute Workflow**.\n3. Evolution API empezará a enviar todos los mensajes entrantes al workflow principal.",
+        "height": 300,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-setup",
+      "name": "Instrucciones",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -260]
+    },
+    {
+      "parameters": {},
+      "id": "trigger-manual",
+      "name": "Ejecutar Manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-140, 100]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-01",
+              "name": "evolution_url",
+              "value": "http://evolution-api:8080",
+              "type": "string"
+            },
+            {
+              "id": "set-02",
+              "name": "evolution_instancia",
+              "value": "principal",
+              "type": "string"
+            },
+            {
+              "id": "set-03",
+              "name": "evolution_apikey",
+              "value": "CAMBIA_ESTA_API_KEY",
+              "type": "string"
+            },
+            {
+              "id": "set-04",
+              "name": "webhook_n8n",
+              "value": "http://n8n:5678/webhook/evolution-whatsapp",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "datos-conexion",
+      "name": "Datos de Conexión",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [80, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.evolution_url }}/webhook/set/{{ $json.evolution_instancia }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $json.evolution_apikey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ webhook: { enabled: true, url: $json.webhook_n8n, byEvents: false, base64: false, events: ['MESSAGES_UPSERT'] } }) }}",
+        "options": {}
+      },
+      "id": "configurar-webhook",
+      "name": "Configurar Webhook en Evolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [300, 100]
+    }
+  ],
+  "connections": {
+    "Ejecutar Manualmente": {
+      "main": [[{ "node": "Datos de Conexión", "type": "main", "index": 0 }]]
+    },
+    "Datos de Conexión": {
+      "main": [[{ "node": "Configurar Webhook en Evolution", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
