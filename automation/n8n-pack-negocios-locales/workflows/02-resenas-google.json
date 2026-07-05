@@ -1,0 +1,230 @@
+{
+  "name": "02 · Solicitud de Reseñas Google con IA",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## ⭐ Más Reseñas en Google\n**Para:** cualquier negocio local (restaurantes, talleres, tiendas, clínicas).\n\nAl día siguiente de cada venta, la IA escribe un mensaje de agradecimiento personalizado y pide la reseña con el enlace directo.\n\n**Hoja `Ventas`:** `Fecha`, `Nombre`, `Telefono`, `Producto`, `ReseñaPedida` (se marca sola).\n\nEn `⚙️ Config` pega el **enlace corto de reseña** del negocio (Perfil de Empresa de Google → Pedir reseñas).",
+        "height": 380,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-02",
+      "name": "Instrucciones",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-560, -340]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * *"
+            }
+          ]
+        }
+      },
+      "id": "trigger-02",
+      "name": "Todos los días 10 a.m.",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-540, 100]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "nombre_negocio", "value": "Como Nuevos", "type": "string" },
+            { "id": "c2", "name": "link_resena", "value": "https://g.page/r/TU_ENLACE_DE_RESENA/review", "type": "string" },
+            { "id": "c3", "name": "evolution_url", "value": "http://evolution-api:8080", "type": "string" },
+            { "id": "c4", "name": "evolution_instancia", "value": "principal", "type": "string" },
+            { "id": "c5", "name": "evolution_apikey", "value": "CAMBIA_ESTA_API_KEY", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config-02",
+      "name": "⚙️ Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-340, 100]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "PEGA_AQUI_LA_URL_DE_TU_GOOGLE_SHEET"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Ventas"
+        },
+        "options": {}
+      },
+      "id": "leer-ventas",
+      "name": "Leer Ventas",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-140, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ventas de AYER a las que no se les ha pedido reseña\nfunction aFecha(v) {\n  if (!v) return null;\n  v = String(v).trim();\n  let m = v.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);\n  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);\n  m = v.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})/);\n  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);\n  const d = new Date(v);\n  return isNaN(d) ? null : d;\n}\nfunction normTel(t) {\n  t = String(t || '').replace(/\\D/g, '');\n  if (t.length === 10 && t.startsWith('3')) t = '57' + t;\n  return t;\n}\nconst ayer = new Date();\nayer.setDate(ayer.getDate() - 1);\nayer.setHours(0, 0, 0, 0);\n\nconst salida = [];\nfor (const item of $input.all()) {\n  const fila = item.json;\n  const fecha = aFecha(fila.Fecha);\n  const yaPedida = String(fila['ReseñaPedida'] || fila.ResenaPedida || '').trim().toUpperCase() === 'SI';\n  const tel = normTel(fila.Telefono);\n  if (fecha && fecha.getTime() === ayer.getTime() && !yaPedida && tel) {\n    salida.push({ json: { ...fila, telefono_normalizado: tel } });\n  }\n}\nreturn salida;"
+      },
+      "id": "filtrar-ventas",
+      "name": "Filtrar Ventas de Ayer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [60, 100]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-02",
+      "name": "Loop Ventas",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [260, 100]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Escribe un mensaje corto de WhatsApp (máximo 4 líneas, tono cálido colombiano, 1-2 emojis) de parte del negocio \"{{ $('⚙️ Config').first().json.nombre_negocio }}\" para {{ $('Loop Ventas').first().json.Nombre }}, que ayer compró \"{{ $('Loop Ventas').first().json.Producto }}\". Agradécele la compra, pregúntale cómo le ha ido con el producto y pídele amablemente que deje una reseña en Google en este enlace: {{ $('⚙️ Config').first().json.link_resena }}\nResponde SOLO con el texto del mensaje, sin comillas ni explicaciones.",
+              "role": "user"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ia-mensaje-02",
+      "name": "IA Redacta Mensaje",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [460, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "const venta = $('Loop Ventas').first().json;\nconst r = $json;\nconst mensaje = (r.message?.content || r.output || r.text || '').trim();\nreturn [{ json: { telefono: venta.telefono_normalizado, mensaje, row_number: venta.row_number } }];"
+      },
+      "id": "preparar-02",
+      "name": "Preparar Envío",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('⚙️ Config').first().json.evolution_url }}/message/sendText/{{ $('⚙️ Config').first().json.evolution_instancia }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $('⚙️ Config').first().json.evolution_apikey }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.telefono, text: $json.mensaje, delay: 1500, linkPreview: true }) }}",
+        "options": {}
+      },
+      "id": "enviar-02",
+      "name": "Enviar WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 120]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "PEGA_AQUI_LA_URL_DE_TU_GOOGLE_SHEET"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Ventas"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Preparar Envío').first().json.row_number }}",
+            "ReseñaPedida": "SI"
+          },
+          "matchingColumns": ["row_number"],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "marcar-02",
+      "name": "Marcar Reseña Pedida",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1060, 120]
+    },
+    {
+      "parameters": {
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "id": "espera-02",
+      "name": "Espera Anti-Bloqueo",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1260, 120],
+      "webhookId": "espera-resenas-antibloqueo"
+    }
+  ],
+  "connections": {
+    "Todos los días 10 a.m.": {
+      "main": [[{ "node": "⚙️ Config", "type": "main", "index": 0 }]]
+    },
+    "⚙️ Config": {
+      "main": [[{ "node": "Leer Ventas", "type": "main", "index": 0 }]]
+    },
+    "Leer Ventas": {
+      "main": [[{ "node": "Filtrar Ventas de Ayer", "type": "main", "index": 0 }]]
+    },
+    "Filtrar Ventas de Ayer": {
+      "main": [[{ "node": "Loop Ventas", "type": "main", "index": 0 }]]
+    },
+    "Loop Ventas": {
+      "main": [
+        [],
+        [{ "node": "IA Redacta Mensaje", "type": "main", "index": 0 }]
+      ]
+    },
+    "IA Redacta Mensaje": {
+      "main": [[{ "node": "Preparar Envío", "type": "main", "index": 0 }]]
+    },
+    "Preparar Envío": {
+      "main": [[{ "node": "Enviar WhatsApp", "type": "main", "index": 0 }]]
+    },
+    "Enviar WhatsApp": {
+      "main": [[{ "node": "Marcar Reseña Pedida", "type": "main", "index": 0 }]]
+    },
+    "Marcar Reseña Pedida": {
+      "main": [[{ "node": "Espera Anti-Bloqueo", "type": "main", "index": 0 }]]
+    },
+    "Espera Anti-Bloqueo": {
+      "main": [[{ "node": "Loop Ventas", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": false }
+}

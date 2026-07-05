@@ -1,0 +1,202 @@
+{
+  "name": "01 · Recordatorio de Citas por WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 📅 Recordatorio de Citas\n**Para:** barberías, salones, odontólogos, veterinarias, estética.\n\nCada mañana lee la hoja **Citas** de Google Sheets y envía recordatorio por WhatsApp a las citas de HOY.\n\n**Columnas de la hoja:** `Fecha` (DD/MM/AAAA o AAAA-MM-DD), `Hora`, `Nombre`, `Telefono`, `Servicio`, `Recordado` (se marca solo).\n\nConfigura el nodo `⚙️ Config` y las credenciales de Google Sheets.",
+        "height": 360,
+        "width": 440,
+        "color": 4
+      },
+      "id": "sticky-01",
+      "name": "Instrucciones",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-560, -320]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "trigger-diario",
+      "name": "Todos los días 7 a.m.",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-540, 100]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "nombre_negocio", "value": "Como Nuevos", "type": "string" },
+            { "id": "c2", "name": "evolution_url", "value": "http://evolution-api:8080", "type": "string" },
+            { "id": "c3", "name": "evolution_instancia", "value": "principal", "type": "string" },
+            { "id": "c4", "name": "evolution_apikey", "value": "CAMBIA_ESTA_API_KEY", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config-01",
+      "name": "⚙️ Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-340, 100]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "PEGA_AQUI_LA_URL_DE_TU_GOOGLE_SHEET"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Citas"
+        },
+        "options": {}
+      },
+      "id": "leer-citas",
+      "name": "Leer Citas",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-140, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filtra las citas de HOY que aún no tienen recordatorio\nfunction aFecha(v) {\n  if (!v) return null;\n  v = String(v).trim();\n  let m = v.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);\n  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);\n  m = v.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})/);\n  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);\n  const d = new Date(v);\n  return isNaN(d) ? null : d;\n}\nfunction normTel(t) {\n  t = String(t || '').replace(/\\D/g, '');\n  if (t.length === 10 && t.startsWith('3')) t = '57' + t; // celular colombiano sin indicativo\n  return t;\n}\nconst hoy = new Date();\nhoy.setHours(0, 0, 0, 0);\n\nconst salida = [];\nfor (const item of $input.all()) {\n  const fila = item.json;\n  const fecha = aFecha(fila.Fecha);\n  const yaRecordado = String(fila.Recordado || '').trim().toUpperCase() === 'SI';\n  const tel = normTel(fila.Telefono);\n  if (fecha && fecha.getTime() === hoy.getTime() && !yaRecordado && tel) {\n    salida.push({ json: { ...fila, telefono_normalizado: tel } });\n  }\n}\nreturn salida;"
+      },
+      "id": "filtrar-citas",
+      "name": "Filtrar Citas de Hoy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [60, 100]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-citas",
+      "name": "Loop Citas",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [260, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Arma el mensaje de recordatorio\nconst cita = $('Loop Citas').first().json;\nconst negocio = $('⚙️ Config').first().json.nombre_negocio;\nconst nombre = String(cita.Nombre || '').split(' ')[0];\nconst mensaje = `¡Hola ${nombre}! 👋 Te escribimos de *${negocio}*.\\n\\nTe recordamos tu cita de *hoy*:\\n🗓️ ${cita.Fecha} a las *${cita.Hora}*\\n💈 Servicio: ${cita.Servicio}\\n\\nSi no puedes asistir, respóndenos este mensaje para reprogramarte. ¡Te esperamos! 😊`;\nreturn [{ json: { telefono: cita.telefono_normalizado, mensaje, row_number: cita.row_number } }];"
+      },
+      "id": "preparar-mensaje-01",
+      "name": "Preparar Mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('⚙️ Config').first().json.evolution_url }}/message/sendText/{{ $('⚙️ Config').first().json.evolution_instancia }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $('⚙️ Config').first().json.evolution_apikey }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.telefono, text: $json.mensaje, delay: 1200 }) }}",
+        "options": {}
+      },
+      "id": "enviar-01",
+      "name": "Enviar WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 120]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "PEGA_AQUI_LA_URL_DE_TU_GOOGLE_SHEET"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Citas"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Preparar Mensaje').first().json.row_number }}",
+            "Recordado": "SI"
+          },
+          "matchingColumns": ["row_number"],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "marcar-recordado",
+      "name": "Marcar Recordado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [880, 120]
+    },
+    {
+      "parameters": {
+        "amount": 8,
+        "unit": "seconds"
+      },
+      "id": "espera-01",
+      "name": "Espera Anti-Bloqueo",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1080, 120],
+      "webhookId": "espera-citas-antibloqueo"
+    }
+  ],
+  "connections": {
+    "Todos los días 7 a.m.": {
+      "main": [[{ "node": "⚙️ Config", "type": "main", "index": 0 }]]
+    },
+    "⚙️ Config": {
+      "main": [[{ "node": "Leer Citas", "type": "main", "index": 0 }]]
+    },
+    "Leer Citas": {
+      "main": [[{ "node": "Filtrar Citas de Hoy", "type": "main", "index": 0 }]]
+    },
+    "Filtrar Citas de Hoy": {
+      "main": [[{ "node": "Loop Citas", "type": "main", "index": 0 }]]
+    },
+    "Loop Citas": {
+      "main": [
+        [],
+        [{ "node": "Preparar Mensaje", "type": "main", "index": 0 }]
+      ]
+    },
+    "Preparar Mensaje": {
+      "main": [[{ "node": "Enviar WhatsApp", "type": "main", "index": 0 }]]
+    },
+    "Enviar WhatsApp": {
+      "main": [[{ "node": "Marcar Recordado", "type": "main", "index": 0 }]]
+    },
+    "Marcar Recordado": {
+      "main": [[{ "node": "Espera Anti-Bloqueo", "type": "main", "index": 0 }]]
+    },
+    "Espera Anti-Bloqueo": {
+      "main": [[{ "node": "Loop Citas", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": false }
+}

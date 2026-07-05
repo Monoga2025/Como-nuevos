@@ -1,0 +1,232 @@
+{
+  "name": "03 · Cobranza Amable con IA",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 💰 Cobranza Amable\n**Para:** gimnasios, colegios/academias, arriendos, planes mensuales, créditos de tienda.\n\nCada mañana revisa la hoja **Pagos** y envía recordatorios redactados por IA: el tono cambia según los días de mora (antes de vencer = recordatorio suave; vencido = firme pero cordial). Repite cada 3 días hasta que se marque PAGADO.\n\n**Hoja `Pagos`:** `Nombre`, `Telefono`, `Concepto`, `Monto`, `FechaVencimiento`, `Estado` (PENDIENTE/PAGADO), `UltimoRecordatorio` (se llena solo).",
+        "height": 400,
+        "width": 470,
+        "color": 4
+      },
+      "id": "sticky-03",
+      "name": "Instrucciones",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-560, -360]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-6"
+            }
+          ]
+        }
+      },
+      "id": "trigger-03",
+      "name": "Lunes a Sábado 9 a.m.",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-540, 100]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "nombre_negocio", "value": "Como Nuevos", "type": "string" },
+            { "id": "c2", "name": "metodos_pago", "value": "Nequi 3001234567, Bancolombia ahorros 123-456789-00 o en el local", "type": "string" },
+            { "id": "c3", "name": "dias_antes_de_vencer", "value": 2, "type": "number" },
+            { "id": "c4", "name": "cada_cuantos_dias_recordar", "value": 3, "type": "number" },
+            { "id": "c5", "name": "evolution_url", "value": "http://evolution-api:8080", "type": "string" },
+            { "id": "c6", "name": "evolution_instancia", "value": "principal", "type": "string" },
+            { "id": "c7", "name": "evolution_apikey", "value": "CAMBIA_ESTA_API_KEY", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config-03",
+      "name": "⚙️ Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-340, 100]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "PEGA_AQUI_LA_URL_DE_TU_GOOGLE_SHEET"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Pagos"
+        },
+        "options": {}
+      },
+      "id": "leer-pagos",
+      "name": "Leer Pagos",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-140, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pagos pendientes que tocan recordar hoy\nfunction aFecha(v) {\n  if (!v) return null;\n  v = String(v).trim();\n  let m = v.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);\n  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);\n  m = v.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})/);\n  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);\n  const d = new Date(v);\n  return isNaN(d) ? null : d;\n}\nfunction normTel(t) {\n  t = String(t || '').replace(/\\D/g, '');\n  if (t.length === 10 && t.startsWith('3')) t = '57' + t;\n  return t;\n}\nconst cfg = $('⚙️ Config').first().json;\nconst hoy = new Date();\nhoy.setHours(0, 0, 0, 0);\nconst MS_DIA = 86400000;\n\nconst salida = [];\nfor (const item of $input.all()) {\n  const fila = item.json;\n  const estado = String(fila.Estado || '').trim().toUpperCase();\n  if (estado === 'PAGADO') continue;\n  const tel = normTel(fila.Telefono);\n  const vence = aFecha(fila.FechaVencimiento);\n  if (!tel || !vence) continue;\n\n  // días de mora: positivo = vencido, negativo = faltan días\n  const diasMora = Math.round((hoy - vence) / MS_DIA);\n\n  // aún no entra en ventana de recordatorio\n  if (diasMora < -cfg.dias_antes_de_vencer) continue;\n\n  // no repetir antes de la cadencia configurada\n  const ultimo = aFecha(fila.UltimoRecordatorio);\n  if (ultimo && Math.round((hoy - ultimo) / MS_DIA) < cfg.cada_cuantos_dias_recordar) continue;\n\n  salida.push({ json: { ...fila, telefono_normalizado: tel, dias_mora: diasMora } });\n}\nreturn salida;"
+      },
+      "id": "filtrar-pagos",
+      "name": "Filtrar Pagos por Recordar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [60, 100]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-03",
+      "name": "Loop Pagos",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [260, 100]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Escribe un mensaje corto de WhatsApp (máximo 5 líneas, español colombiano, respetuoso) de parte de \"{{ $('⚙️ Config').first().json.nombre_negocio }}\" para {{ $('Loop Pagos').first().json.Nombre }} sobre el pago de \"{{ $('Loop Pagos').first().json.Concepto }}\" por ${{ $('Loop Pagos').first().json.Monto }} que vence/venció el {{ $('Loop Pagos').first().json.FechaVencimiento }}.\nSituación: {{ $('Loop Pagos').first().json.dias_mora <= 0 ? 'aún NO está vencido, faltan ' + Math.abs($('Loop Pagos').first().json.dias_mora) + ' día(s); tono: recordatorio amable y ligero' : 'está VENCIDO hace ' + $('Loop Pagos').first().json.dias_mora + ' día(s); tono: cordial pero claro y firme, invita a ponerse al día hoy' }}.\nIncluye los medios de pago: {{ $('⚙️ Config').first().json.metodos_pago }}.\nCierra ofreciendo ayuda si ya pagó o tiene alguna dificultad. Responde SOLO con el texto del mensaje.",
+              "role": "user"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ia-mensaje-03",
+      "name": "IA Redacta Recordatorio",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [460, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pago = $('Loop Pagos').first().json;\nconst r = $json;\nconst mensaje = (r.message?.content || r.output || r.text || '').trim();\nconst hoy = new Date();\nconst fechaHoy = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-' + String(hoy.getDate()).padStart(2, '0');\nreturn [{ json: { telefono: pago.telefono_normalizado, mensaje, row_number: pago.row_number, fechaHoy } }];"
+      },
+      "id": "preparar-03",
+      "name": "Preparar Envío",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('⚙️ Config').first().json.evolution_url }}/message/sendText/{{ $('⚙️ Config').first().json.evolution_instancia }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $('⚙️ Config').first().json.evolution_apikey }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.telefono, text: $json.mensaje, delay: 1500 }) }}",
+        "options": {}
+      },
+      "id": "enviar-03",
+      "name": "Enviar WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 120]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "PEGA_AQUI_LA_URL_DE_TU_GOOGLE_SHEET"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Pagos"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Preparar Envío').first().json.row_number }}",
+            "UltimoRecordatorio": "={{ $('Preparar Envío').first().json.fechaHoy }}"
+          },
+          "matchingColumns": ["row_number"],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "marcar-03",
+      "name": "Registrar Recordatorio",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1060, 120]
+    },
+    {
+      "parameters": {
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "id": "espera-03",
+      "name": "Espera Anti-Bloqueo",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1260, 120],
+      "webhookId": "espera-cobranza-antibloqueo"
+    }
+  ],
+  "connections": {
+    "Lunes a Sábado 9 a.m.": {
+      "main": [[{ "node": "⚙️ Config", "type": "main", "index": 0 }]]
+    },
+    "⚙️ Config": {
+      "main": [[{ "node": "Leer Pagos", "type": "main", "index": 0 }]]
+    },
+    "Leer Pagos": {
+      "main": [[{ "node": "Filtrar Pagos por Recordar", "type": "main", "index": 0 }]]
+    },
+    "Filtrar Pagos por Recordar": {
+      "main": [[{ "node": "Loop Pagos", "type": "main", "index": 0 }]]
+    },
+    "Loop Pagos": {
+      "main": [
+        [],
+        [{ "node": "IA Redacta Recordatorio", "type": "main", "index": 0 }]
+      ]
+    },
+    "IA Redacta Recordatorio": {
+      "main": [[{ "node": "Preparar Envío", "type": "main", "index": 0 }]]
+    },
+    "Preparar Envío": {
+      "main": [[{ "node": "Enviar WhatsApp", "type": "main", "index": 0 }]]
+    },
+    "Enviar WhatsApp": {
+      "main": [[{ "node": "Registrar Recordatorio", "type": "main", "index": 0 }]]
+    },
+    "Registrar Recordatorio": {
+      "main": [[{ "node": "Espera Anti-Bloqueo", "type": "main", "index": 0 }]]
+    },
+    "Espera Anti-Bloqueo": {
+      "main": [[{ "node": "Loop Pagos", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": false }
+}

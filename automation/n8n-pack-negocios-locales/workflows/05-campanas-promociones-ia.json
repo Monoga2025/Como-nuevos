@@ -1,0 +1,223 @@
+{
+  "name": "05 · Campañas de Promociones Personalizadas con IA",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 📣 Campañas con IA (difusión inteligente)\n**Para:** lanzamientos, ofertas de temporada, fechas especiales (día de la madre, Black Friday, aniversarios).\n\nA diferencia de una difusión normal, la IA redacta un mensaje DIFERENTE para cada cliente usando su nombre y su historial — mucho mayor tasa de respuesta y menor riesgo de bloqueo.\n\n**Uso:** escribe la oferta en `⚙️ Config Campaña` (con un `campana_id` nuevo), pulsa *Execute Workflow* y listo. Envía con pausas de 20 s entre mensajes.\n\n**Hoja `Clientes`:** `Nombre`, `Telefono`, `UltimoProducto`, `UltimaCampana` (se marca sola con el id).",
+        "height": 430,
+        "width": 480,
+        "color": 4
+      },
+      "id": "sticky-05",
+      "name": "Instrucciones",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-560, -390]
+    },
+    {
+      "parameters": {},
+      "id": "trigger-05",
+      "name": "Lanzar Campaña (manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-540, 100]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "campana_id", "value": "PROMO-JULIO-2026", "type": "string" },
+            { "id": "c2", "name": "oferta", "value": "Semana de tecnología: iPhone reacondicionados con 15% de descuento y envío gratis. Válido hasta el domingo.", "type": "string" },
+            { "id": "c3", "name": "nombre_negocio", "value": "Como Nuevos", "type": "string" },
+            { "id": "c4", "name": "maximo_por_corrida", "value": 50, "type": "number" },
+            { "id": "c5", "name": "evolution_url", "value": "http://evolution-api:8080", "type": "string" },
+            { "id": "c6", "name": "evolution_instancia", "value": "principal", "type": "string" },
+            { "id": "c7", "name": "evolution_apikey", "value": "CAMBIA_ESTA_API_KEY", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config-05",
+      "name": "⚙️ Config Campaña",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-340, 100]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "PEGA_AQUI_LA_URL_DE_TU_GOOGLE_SHEET"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Clientes"
+        },
+        "options": {}
+      },
+      "id": "leer-clientes-05",
+      "name": "Leer Clientes",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-140, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clientes que aún no han recibido ESTA campaña (permite reanudar si se corta)\nfunction normTel(t) {\n  t = String(t || '').replace(/\\D/g, '');\n  if (t.length === 10 && t.startsWith('3')) t = '57' + t;\n  return t;\n}\nconst cfg = $('⚙️ Config Campaña').first().json;\nconst salida = [];\nfor (const item of $input.all()) {\n  if (salida.length >= cfg.maximo_por_corrida) break;\n  const fila = item.json;\n  const tel = normTel(fila.Telefono);\n  if (!tel) continue;\n  if (String(fila.UltimaCampana || '').trim() === cfg.campana_id) continue;\n  salida.push({ json: { ...fila, telefono_normalizado: tel } });\n}\nreturn salida;"
+      },
+      "id": "filtrar-05",
+      "name": "Filtrar Pendientes de Campaña",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [60, 100]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-05",
+      "name": "Loop Campaña",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [260, 100]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Escribe un mensaje de WhatsApp único y natural (máximo 4 líneas, español colombiano, 1-2 emojis, NO debe sonar a cadena ni a spam masivo) de parte de \"{{ $('⚙️ Config Campaña').first().json.nombre_negocio }}\" para {{ $('Loop Campaña').first().json.Nombre }}. Su última compra fue: \"{{ $('Loop Campaña').first().json.UltimoProducto || 'no registrada' }}\".\nComunica esta oferta: {{ $('⚙️ Config Campaña').first().json.oferta }}\nSi su última compra se relaciona con la oferta, conéctalas de forma natural. Varía la redacción: no empieces con \"¡Hola\" siempre. Cierra invitando a responder este mensaje para más información. Responde SOLO con el texto del mensaje.",
+              "role": "user"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ia-mensaje-05",
+      "name": "IA Personaliza Mensaje",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [460, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cliente = $('Loop Campaña').first().json;\nconst r = $json;\nconst mensaje = (r.message?.content || r.output || r.text || '').trim();\nreturn [{ json: { telefono: cliente.telefono_normalizado, mensaje, row_number: cliente.row_number } }];"
+      },
+      "id": "preparar-05",
+      "name": "Preparar Envío",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('⚙️ Config Campaña').first().json.evolution_url }}/message/sendText/{{ $('⚙️ Config Campaña').first().json.evolution_instancia }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $('⚙️ Config Campaña').first().json.evolution_apikey }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.telefono, text: $json.mensaje, delay: 2000 }) }}",
+        "options": {}
+      },
+      "id": "enviar-05",
+      "name": "Enviar WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 120]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "PEGA_AQUI_LA_URL_DE_TU_GOOGLE_SHEET"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Clientes"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Preparar Envío').first().json.row_number }}",
+            "UltimaCampana": "={{ $('⚙️ Config Campaña').first().json.campana_id }}"
+          },
+          "matchingColumns": ["row_number"],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "marcar-05",
+      "name": "Marcar Enviado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1060, 120]
+    },
+    {
+      "parameters": {
+        "amount": 20,
+        "unit": "seconds"
+      },
+      "id": "espera-05",
+      "name": "Espera Anti-Bloqueo (20 s)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1260, 120],
+      "webhookId": "espera-campanas-antibloqueo"
+    }
+  ],
+  "connections": {
+    "Lanzar Campaña (manual)": {
+      "main": [[{ "node": "⚙️ Config Campaña", "type": "main", "index": 0 }]]
+    },
+    "⚙️ Config Campaña": {
+      "main": [[{ "node": "Leer Clientes", "type": "main", "index": 0 }]]
+    },
+    "Leer Clientes": {
+      "main": [[{ "node": "Filtrar Pendientes de Campaña", "type": "main", "index": 0 }]]
+    },
+    "Filtrar Pendientes de Campaña": {
+      "main": [[{ "node": "Loop Campaña", "type": "main", "index": 0 }]]
+    },
+    "Loop Campaña": {
+      "main": [
+        [],
+        [{ "node": "IA Personaliza Mensaje", "type": "main", "index": 0 }]
+      ]
+    },
+    "IA Personaliza Mensaje": {
+      "main": [[{ "node": "Preparar Envío", "type": "main", "index": 0 }]]
+    },
+    "Preparar Envío": {
+      "main": [[{ "node": "Enviar WhatsApp", "type": "main", "index": 0 }]]
+    },
+    "Enviar WhatsApp": {
+      "main": [[{ "node": "Marcar Enviado", "type": "main", "index": 0 }]]
+    },
+    "Marcar Enviado": {
+      "main": [[{ "node": "Espera Anti-Bloqueo (20 s)", "type": "main", "index": 0 }]]
+    },
+    "Espera Anti-Bloqueo (20 s)": {
+      "main": [[{ "node": "Loop Campaña", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": false }
+}
